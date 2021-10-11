@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 from scipy.io import wavfile
 import itertools
@@ -20,15 +21,17 @@ for dirpath, filename in wav_files:
 
 print('Generating examples')
 examples = list()
+metadata = {}
 
 def powerset(iterable):
     s = list(iterable)
     return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
 
+index = {}
 for song in progressbar(songs):
+    start = len(examples)
     dirpath = song['dirpath']
-    mix = wavfile.read(dirpath + '/' + song['mix'])[1]
-    # import pdb; pdb.set_trace()
+    sps, mix = wavfile.read(dirpath + '/' + song['mix'])
     solos = [wavfile.read(dirpath + '/' + solo)[1] for solo in song['solos']]
     solos.sort(key = lambda array: np.mean(array).item())
     for group in powerset(solos):
@@ -38,26 +41,44 @@ for song in progressbar(songs):
             x += group[i]
         y = group[0]
         examples.append((x, y))
+    stop = len(examples) - 1
+    index[song['mix']] = (start, stop)
 
 width = 30
+
+metadata['index'] = index
+metadata['samples_per_second'] = sps
+metadata['width'] = width
+
+
 print(f'Subdivide examples into {width} second pieces')
-timeframe = 48000 * width
-import pdb; pdb.set_trace()
+timeframe = sps * width
 
 print('Scanning dataset size and allocating disk space')
 count = 0
-for x, y in progressbar(examples):
-    for i in range(0, len(x) - timeframe, timeframe):
+start = 0
+for i, (x, y) in progressbar(enumerate(examples)):
+    for t in range(0, len(x) - timeframe, timeframe):
         count += 1
-dataset = np.memmap('./data/dataset.npy', dtype=int, mode='w+', shape=(count, 2, timeframe))
 
+dataset = np.memmap('./data/dataset.npy', dtype=int, mode='r+', shape=(count, 2, timeframe))
+
+metadata['total_segments'] = count
+metadata['dtype'] = str(dataset.dtype)
+metadata['shape'] = dataset.shape
+
+with open('./data/dataset.json', 'w+') as f:
+    json.dump(metadata, f)
+
+exit()
 print('Write segments to disk')
 count = 0
 for x, y in progressbar(examples):
-    for i in range(0, len(x) - timeframe, timeframe):
-        dataset[count, 0] = x[i : i + timeframe]
-        dataset[count, 1] = y[i : i + timeframe]
+    for t in range(0, len(x) - timeframe, timeframe):
+        dataset[count, 0] = x[t : t + timeframe]
+        dataset[count, 1] = y[t : t + timeframe]
         count += 1
     dataset.flush()
+
 
 print('Complete')
