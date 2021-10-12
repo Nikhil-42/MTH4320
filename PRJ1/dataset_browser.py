@@ -18,10 +18,17 @@ Options:
 [q] Quit
 ''')
 
-sps = 48000
+sps = metadata['samples_per_second']
+index = metadata['index']
 
 current = 0
 while True:
+    song = index[current]
+    print(f'''
+        {song['title']}
+                   {song['example']}/{song['num_examples']}
+        <----------({current})---------->
+    ''')
     x = dataset[current, 0]
     y = dataset[current, 1]
     duration = len(x) / sps
@@ -46,6 +53,7 @@ while True:
         plt.plot(x, color='blue')
         plt.plot(y, color='orange')
         plt.ylim([-1000000000,1000000000])
+        
         plt.show()
         continue
     elif option == 'q':
