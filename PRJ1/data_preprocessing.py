@@ -5,10 +5,10 @@ from scipy.io import wavfile
 import itertools
 from progressbar import progressbar
 
-width = 30
+width = 10
 
 print('Reading file tree')
-wav_files = list()
+wav_files = []
 for dirpath, dirnames, filenames in os.walk('./data/', topdown=False):
     wav_files += [(dirpath, filename) for filename in filenames if filename[-3:] == 'wav' and filename[0] != '.']
 
@@ -21,71 +21,74 @@ for dirpath, filename in wav_files:
     else:
         raise Exception('%s is out of sequence' % filename)
 
-print('Generating examples')
-examples = list()
-metadata = {}
+print('Allocating storage space')
 
 def powerset(iterable):
     s = list(iterable)
     return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
 
-table = []
+count = 0
+
+sps = 0
+# Dry run to get count
 for song in progressbar(songs):
-    # import pdb; pdb.set_trace()
+
+    # Read in wav files as numpy arrays
     dirpath = song['dirpath']
     sps, mix = wavfile.read(dirpath + '/' + song['mix'])
-    solos = [wavfile.read(dirpath + '/' + solo)[1] for solo in song['solos']]
-    solos.sort(key = lambda array: np.mean(array).item())
-    num_permutations = 0
-    start = len(examples)
-    for group in powerset(solos):
-        if len(group) < 1: continue
-        x = group[0]
-        for i in range(1, len(group)):
-            x += group[i]
-        y = group[0]
-        num_permutations += 1
-        examples.append((x, y))
-    stop = len(examples) 
-    table.append((song['mix'], (start, stop)))
+    solos = len(song['solos'])
+    timeframe = sps * width
 
-metadata['samples_per_second'] = sps
-metadata['width'] = width
+    count += (len(mix) // timeframe) * (2**solos - 1)
 
-def get_song(e):
-    low = 0
-    high = len(table) - 1
-    mid = 0
-
-    while low <= high:
-        mid = (high + low) // 2
-        if e >= table[mid][1][1]:
-            low = mid + 1
-        elif e < table[mid][1][0]:
-            high = mid - 1
-        else:
-            return table[mid]
-    return None
-
-print(f'Subdivide examples into {width} second pieces')
 timeframe = sps * width
-
-print('Scanning dataset size and allocating disk space')
+dataset = np.memmap('./data/dataset.npy', dtype='float64', mode='w+', shape=(count, 2, timeframe))
+metadata = {}
 index = []
 
-for e, (x, y) in enumerate(progressbar(examples)):
-    for i, t in enumerate(range(0, len(x) - timeframe, timeframe)):
-        song = get_song(e)
-        index.append({
-            'title': song[0],
-            'start_time': width * i,
-            'end_time': width * (i + 1),
-            'example': e - song[1][0] + 1,
-            'num_examples': song[1][1] - song[1][0]
-        })
+print('Generating examples')
 
-dataset = np.memmap('./data/dataset.npy', dtype=int, mode='w+', shape=(len(index), 2, timeframe))
+for song in progressbar(songs):
 
+    # Read in wav files as numpy arrays
+    dirpath = song['dirpath']
+    sps, mix = wavfile.read(dirpath + '/' + song['mix'])
+    solos = [(solo, wavfile.read(dirpath + '/' + solo)[1]) for solo in song['solos']]
+    solos.sort(key = lambda solo: np.mean(solo[1]).item())
+
+    # Get powerset (all possible mixes and solos)
+    pset = powerset(solos)
+
+    timeframe = sps * width
+    for e, group in enumerate(pset):
+        if len(group) < 1: continue # skip empty set
+
+        x = np.zeros_like(group[0][1])
+        for i in range(len(group)):
+            x += group[i][1]
+        y = group[0][1].copy()
+
+        # x is a mix | y is a solo
+
+        # Slice into even chunks
+        for i, t in enumerate(range(0, len(x) - timeframe, timeframe)):
+            dataset[len(index), 0] = x[t : t + timeframe]
+            dataset[len(index), 1] = y[t : t + timeframe]
+
+            index.append({
+                'title': song['mix'],
+                'instruments': ','.join((solo[0] for solo in group)),
+                'start_time': width * i,
+                'end_time': width * (i + 1),
+                'example': e,
+                'num_examples': 2**len(solos) - 1
+            })
+
+    dataset.flush()
+
+print('Save metadata')
+metadata['samples_per_second'] = sps
+metadata['width'] = width
 metadata['total_segments'] = len(index)
 metadata['dtype'] = str(dataset.dtype)
 metadata['shape'] = dataset.shape
@@ -93,15 +96,5 @@ metadata['index'] = index
 
 with open('./data/dataset.json', 'w+') as f:
     json.dump(metadata, f)
-
-print('Write segments to disk')
-count = 0
-for x, y in progressbar(examples):
-    for t in range(0, len(x) - timeframe, timeframe):
-        dataset[count, 0] = x[t : t + timeframe]
-        dataset[count, 1] = y[t : t + timeframe]
-        count += 1
-    dataset.flush()
-
 
 print('Complete')
