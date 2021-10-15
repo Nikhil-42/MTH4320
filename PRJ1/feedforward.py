@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sn
+import os
 
 from collections import namedtuple
 from progressbar import progressbar
@@ -33,6 +34,20 @@ class FeedforwardNeuralNetwork:
             print(self.W[l].shape)
             print(self.layers[l].size, self.layers[l].activation_func)
     
+    def save(self, path):
+        path = path.rstrip('/\\')
+        try:
+            os.mkdir(path)
+        except OSError as e:
+            self.save(input('Invalid path. Enter a different one: '))
+            return
+        for i in range(len(self.W)):
+            np.save(f'{path}/w_{i}.npy', self.W[i])
+    
+    def load(self, path):
+        for i in range(len(self.W)):
+            self.W[i] = np.load(f'{path}/w_{i}.npy')
+            
     def predict(self, X, add_ones=True):
         p = np.atleast_2d(X)
         if add_ones:
@@ -73,6 +88,8 @@ class FeedforwardNeuralNetwork:
             X = X[p]
             Y = Y[p]
 
+            d_W = [0] * len(self.W)
+
             for (x, y) in self.get_next_batch(X, Y, batch_size):
                 
                 # Feed forward
@@ -97,13 +114,14 @@ class FeedforwardNeuralNetwork:
 
                 # Update weights
                 for l in range(len(self.W)):
-                    self.W[l] -= learning_rate * (
+                    d_W[l] = learning_rate * (
                         A[l].T.dot(D[l]) + 
                         2 * self.l2_penalty / num_examples * self.W[l] +
                         self.l1_penalty / num_examples * np.sign(self.W[l]) * self.W[l]
-                    )
+                    ) + momentum * d_W[l]
 
             training_losses.append(self.calc_loss(X, Y))
+            print(training_losses[-1])
             testing_losses.append(self.calc_loss(testX, testY, add_ones=True))
 
         fig, ax1 = plt.subplots()
@@ -142,11 +160,16 @@ def leaky_relu(z):
 def d_leaky_relu(y):
     return np.maximum(0.1, np.sign(y))
 
+def elu(z):
+    return np.where(z > 0, z, (np.exp(z) - 1))
+def d_elu(y):
+    return np.where(y > 0, 1, y + 1)
+
 if __name__ == '__main__':
 
     layers = [
-        Layer(2, True, sigmoid, d_sigmoid),
-        Layer(1, False, sigmoid, d_sigmoid),
+        Layer(2, True, elu, d_elu),
+        Layer(1, False, elu, d_elu),
     ]
 
     X = np.round(np.random.rand(1000, 2))
@@ -172,3 +195,17 @@ if __name__ == '__main__':
     labs = [p.get_label() for p in ps]
     ax1.legend(ps, labs, loc=0)
     plt.show()
+
+    # Save model
+    import time
+    path = f'models/xor_{int(time.time())}'
+    model.save(path)
+
+    model = FeedforwardNeuralNetwork(2, layers)
+    model.load(path)
+
+    X = np.array([[0,0],[0,1],[1,0],[1,1]])
+    Y = (np.sum(X, axis=1) % 2)[:, None]
+
+    print(X)
+    print(model.predict(X))
