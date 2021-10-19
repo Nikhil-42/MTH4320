@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sn
 import os
+from scipy.special import expit
 
 from collections import namedtuple
 from progressbar import progressbar
@@ -24,23 +25,40 @@ class FeedforwardNeuralNetwork:
         self.l1_penalty = l1_penalty
         self.l2_penalty = l2_penalty
 
-        self.W.append(np.random.randn(input_shape + 1, layers[0].size + layers[0].bias))
+        self.W.append(np.random.randn(input_shape + layers[0].bias, layers[0].size) * np.sqrt(input_shape))
+        if layers[0].bias:
+            self.W[-1][:, -1] = np.zeros_like(self.W[-1][:, -1])  
         for i in range(len(layers) - 1):
-            self.W.append(np.random.randn(layers[i].size + layers[i].bias, layers[i+1].size + layers[i+1].bias) / 10000.0)   
+            self.W.append(np.random.randn(layers[i].size + layers[i+1].bias, layers[i+1].size) * np.sqrt(2/layers[i].size) / 100000)
+            if layers[i].bias:
+                self.W[-1][:, -1] = np.zeros_like(self.W[-1][:, -1])  
 
     def print_summary(self):
-        print('Input Shape: ', self.input_shape)
+        s = ''
+        s += f'Input Shape: {self.input_shape}\n'
+        s += f'Layers:\n'
         for l in range(len(self.layers)):
-            print(self.W[l].shape)
-            print(self.layers[l].size, self.layers[l].activation_func)
+            s += f'\t{l}:\n'
+            s += f'\t\tSize: {self.layers[l].size}\n'
+            s += f'\t\tBias: {self.layers[l].bias}\n'
+            s += f'\t\tFunc: {self.layers[l].activation_func}\n'
+            s += f'\t\tShape: {self.W[l].shape}\n'
+        
+        print(s)
+        return s
     
     def save(self, path):
         path = path.rstrip('/\\')
         try:
             os.mkdir(path)
+
         except OSError as e:
             self.save(input('Invalid path. Enter a different one: '))
             return
+
+        with open(f'{path}/summary.txt', 'w+') as summary:
+            summary.write(self.print_summary())
+
         for i in range(len(self.W)):
             np.save(f'{path}/w_{i}.npy', self.W[i])
     
@@ -48,15 +66,20 @@ class FeedforwardNeuralNetwork:
         for i in range(len(self.W)):
             self.W[i] = np.load(f'{path}/w_{i}.npy')
             
-    def predict(self, X, add_ones=True):
+    def predict(self, X):
+
+        # Feed forward
         p = np.atleast_2d(X)
-        if add_ones:
-            p = np.hstack((p, np.ones([X.shape[0],1])))
+
         for w, layer in zip(self.W, self.layers):
-            p = layer.activation_func(np.dot(p, w))
+            if layer.bias:
+                p = np.hstack((p, np.ones([p.shape[0],1])))
+            p = p.dot(w)
+            p = layer.activation_func(p)
+
         return p
 
-    def calc_loss(self, X, Y, add_ones=False):
+    def calc_loss(self, X, Y):
         l1 = 0
         l2 = 0
 
@@ -64,7 +87,7 @@ class FeedforwardNeuralNetwork:
             l1 += np.sum(np.abs(w))
             l2 += np.sum(w ** 2)
         return (
-            self.loss(self.predict(X, add_ones=add_ones), Y) +
+            self.loss(self.predict(X), Y) +
             self.l1_penalty / X.shape[0] * l1 + 
             self.l2_penalty / X.shape[0] * l2
         )
@@ -74,7 +97,6 @@ class FeedforwardNeuralNetwork:
             yield (X[i:i + batch_size], Y[i:i + batch_size])
     
     def fit(self, X, Y, testX, testY, epochs = 1000, batch_size = 32, learning_rate = 0.01, momentum = 0):
-        X = np.hstack((X, np.ones([X.shape[0], 1])))
         training_losses = []
         testing_losses = []
 
@@ -96,6 +118,8 @@ class FeedforwardNeuralNetwork:
                 A = [np.atleast_2d(x)]
 
                 for w, layer in zip(self.W, self.layers):
+                    if layer.bias:
+                        A[-1] = np.hstack((A[-1], np.ones([A[-1].shape[0],1])))
                     net = A[-1].dot(w)
                     out = layer.activation_func(net)
 
@@ -105,9 +129,12 @@ class FeedforwardNeuralNetwork:
                 error = A[-1] - y
                 D = [self.d_loss(A[-1], y)]
 
-                for l in range(len(A) - 2, 0, -1):
-                    delta = D[-1].dot(self.W[l].T)
+                for l in range(len(self.W) - 1, 0, -1):
+                    delta = D[-1]
+                    delta = delta.dot(self.W[l].T)
                     delta = delta * self.layers[l].d_activation_func(A[l])
+                    if self.layers[l].bias:
+                        delta = delta[:, :-1]
                     D.append(delta)
                 
                 D = D[::-1]
@@ -119,10 +146,12 @@ class FeedforwardNeuralNetwork:
                         2 * self.l2_penalty / num_examples * self.W[l] +
                         self.l1_penalty / num_examples * np.sign(self.W[l]) * self.W[l]
                     ) + momentum * d_W[l]
+                    self.W[l] -= d_W[l]
+                print(self.calc_loss(X, Y))
 
             training_losses.append(self.calc_loss(X, Y))
             print(training_losses[-1])
-            testing_losses.append(self.calc_loss(testX, testY, add_ones=True))
+            testing_losses.append(self.calc_loss(testX, testY))
 
         fig, ax1 = plt.subplots()
 
@@ -141,7 +170,7 @@ class FeedforwardNeuralNetwork:
         plt.show()
 
 def sigmoid(z):
-    return 1 / (1 + np.exp(-z))
+    return expit(z)
 def d_sigmoid(y):
     return y * (1 - y)
 
@@ -168,8 +197,8 @@ def d_elu(y):
 if __name__ == '__main__':
 
     layers = [
-        Layer(2, True, elu, d_elu),
-        Layer(1, False, elu, d_elu),
+        Layer(2, False, elu, d_elu),
+        Layer(1, True, sigmoid, sigmoid),
     ]
 
     X = np.round(np.random.rand(1000, 2))

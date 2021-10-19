@@ -6,9 +6,9 @@ import itertools
 from progressbar import progressbar
 from matplotlib import pyplot as plt
 
-WIDTH = 5
+WIDTH = 10
 MAX_FREQ = 8192
-SPEC_RESOLUTION = (256, 128)
+SPEC_RESOLUTION = (256, 256)
 
 def compile_examples():
 
@@ -33,7 +33,7 @@ def compile_examples():
         return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
 
     count = 0
-
+    
     sps = 0
     # Dry run to get count
     for song in progressbar(songs):
@@ -44,15 +44,14 @@ def compile_examples():
         solos = len(song['solos'])
         timeframe = sps * WIDTH
 
-        count += (len(mix) // timeframe) * (2**solos - 1)
-
+        count += (len(mix) // timeframe) * (2**solos - 1) * solos
+         
     timeframe = sps * WIDTH
     dataset = np.memmap('./data/dataset.npy', dtype=mix.dtype, mode='w+', shape=(count, 2, timeframe))
-    metadata = {}
     index = []
 
-    print('Generating examples')
-
+    print("Generating examples")
+    
     for song in progressbar(songs):
 
         # Read in wav files as numpy arrays
@@ -71,33 +70,38 @@ def compile_examples():
             x = np.zeros_like(group[0][1])
             for i in range(len(group)):
                 x += group[i][1]
-            y = group[0][1].copy()
 
-            # x is a mix | y is a solo
+            for j in range(len(group)):
+                y = group[j][1].copy()
 
-            # Slice into even chunks
-            for i, t in enumerate(range(0, len(x) - timeframe, timeframe)):
-                dataset[len(index), 0] = x[t : t + timeframe]
-                dataset[len(index), 1] = y[t : t + timeframe]
+                # x is a mix | y is a solo
 
-                index.append({
-                    'title': song['mix'],
-                    'instruments': ','.join((solo[0] for solo in group)),
-                    'start_time': WIDTH * i,
-                    'end_time': WIDTH * (i + 1),
-                    'example': e,
-                    'num_examples': 2**len(solos) - 1
-                })
+                # Slice into even chunks
+                for i, t in enumerate(range(0, len(x) - timeframe, timeframe)):
+                    dataset[len(index), 0] = x[t : t + timeframe]
+                    dataset[len(index), 1] = y[t : t + timeframe]
+
+                    index.append({
+                        'title': song['mix'],
+                        'instruments': ','.join((solo[0].split('_')[2] for solo in group)),
+                        'target_instrument': group[j][0].split('_')[2],
+                        'start_time': WIDTH * i,
+                        'end_time': WIDTH * (i + 1),
+                        'example': e,
+                        'num_examples': 2**len(solos) - 1
+                    })
 
         dataset.flush()
 
     print('Save metadata')
-    metadata['samples_per_second'] = sps
-    metadata['width'] = WIDTH
-    metadata['total_segments'] = len(index)
-    metadata['dtype'] = str(dataset.dtype)
-    metadata['shape'] = dataset.shape
-    metadata['index'] = index
+    metadata = {
+        'data_dtype': str(dataset.dtype),
+        'data_shape': dataset.shape,
+        'samples_per_second': sps,
+        'width': WIDTH,
+        'total_segments': len(index),
+        'index': index
+    }
 
     with open('./data/dataset.json', 'w+') as f:
         json.dump(metadata, f)
@@ -111,7 +115,7 @@ def generate_spectrograms():
         metadata = json.load(f)
 
     sps = metadata['samples_per_second']
-    dataset = np.memmap('./data/dataset.npy', mode='r', dtype=metadata['dtype'], shape=tuple(metadata['shape']))
+    dataset = np.memmap('./data/dataset.npy', mode='r', dtype=metadata['data_dtype'], shape=tuple(metadata['data_shape']))
 
     n_fft = 2**int(0.5 + np.log2(2 * (sps / (MAX_FREQ / SPEC_RESOLUTION[0]) - 1)))
     hop_length = (WIDTH * sps) // SPEC_RESOLUTION[1]
@@ -119,20 +123,22 @@ def generate_spectrograms():
     x = dataset[0, 0]
     S_x = librosa.stft((x / (np.iinfo(x.dtype).max + 1)).astype('float32'), n_fft=n_fft, hop_length=hop_length)[:SPEC_RESOLUTION[0], :SPEC_RESOLUTION[1]]
 
-    shape = (metadata['shape'][0], 2, S_x.shape[0], S_x.shape[1])
+    shape = (metadata['data_shape'][0], 2, S_x.shape[0], S_x.shape[1])
     spectrograms = np.memmap('./data/spectrograms.npy', shape=shape, dtype='float32', mode='w+')
 
 
-    metadata = {
-        'dtype': str(spectrograms.dtype),
-        'shape': spectrograms.shape,
+    spectrograms_metadata = {
+        'spec_dtype': str(spectrograms.dtype),
+        'spec_shape': spectrograms.shape,
         'n_fft': n_fft,
         'hop_length': hop_length,
         'max_freq': MAX_FREQ,
         'spec_resolution': SPEC_RESOLUTION,
     }
 
-    with open('./data/spectrograms.json', 'w+') as f:
+    metadata.update(spectrograms_metadata)
+
+    with open('./data/dataset.json', 'w') as f:
         json.dump(metadata, f)
 
     for i in progressbar(range(len(dataset))):
@@ -146,6 +152,25 @@ def generate_spectrograms():
         
         spectrograms.flush()
 
+def generate_subset(instrument):
+
+    with open('./data/dataset.json', 'r') as f:
+        metadata = json.load(f) 
+
+    index = metadata['index']
+
+    i_vals = []
+    for i, clip in enumerate(index):
+        if clip['target_instrument'] == instrument:
+            i_vals.append(i)
+
+    segment = np.array(i_vals)
+    spectrograms = np.memmap('./data/spectrograms.npy', mode='r', dtype=metadata['spec_dtype'], shape=tuple(metadata['spec_shape']))
+    subspec = spectrograms[segment]
+
+    return subspec
+
 if __name__ == '__main__':
-    compile_examples()
-    generate_spectrograms()
+    # compile_examples()
+    # generate_spectrograms()
+    pass

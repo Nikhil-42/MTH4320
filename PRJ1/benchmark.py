@@ -36,19 +36,14 @@ else:
 print('Data loaded')
 
 layers = [
-    Layer(512, True, sigmoid, d_sigmoid),
-    Layer(256, True, elu, d_elu),
-    Layer(256, True, elu, d_elu),
-    Layer(512, True, elu, d_elu),
-    Layer(X.shape[1], True, relu, d_relu),
+    Layer(X.shape[1], False, lambda x: x, lambda y: np.ones_like(y)),
 ]
 
-model = FeedforwardNeuralNetwork(X.shape[1], layers, l2_penalty=0.1)
+model = FeedforwardNeuralNetwork(X.shape[1], layers)
 model.print_summary()
 print('Model constructed')
 try:
-    # import pdb; pdb.set_trace()
-    model.fit(X, Y, X_t, Y_t, learning_rate=0.001, epochs=100, momentum=0.9)
+    model.fit(X, Y, X_t, Y_t, learning_rate=0.01, epochs=100, momentum=0.75)
     print('Training Complete')
 except:
     print('Something went wrong')

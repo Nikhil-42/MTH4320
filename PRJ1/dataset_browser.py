@@ -12,13 +12,10 @@ def plot_spectrogram(Y, sr, hop_length, y_axis='linear'):
     g = specshow(Y, sr=sr, hop_length=hop_length, x_axis='time', y_axis=y_axis)
     plt.colorbar(format="%+2.f")
 
-with open('./data/spectrograms.json', 'r') as f:
-    spec_metadata = json.load(f)
-spectrograms = np.memmap('./data/spectrograms.npy', mode='r', dtype=spec_metadata['dtype'], shape=tuple(spec_metadata['shape']))
-
 with open('./data/dataset.json', 'r') as f:
     metadata = json.load(f)
-dataset = np.memmap('./data/dataset.npy', mode='r', dtype=metadata['dtype'], shape=tuple(metadata['shape']))
+dataset = np.memmap('./data/dataset.npy', mode='r', dtype=metadata['data_dtype'], shape=tuple(metadata['data_shape']))
+spectrograms = np.memmap('./data/spectrograms.npy', mode='r', dtype=metadata['spec_dtype'], shape=tuple(metadata['spec_shape']))
 
 print('''
 Options:
@@ -38,60 +35,87 @@ index = metadata['index']
 current = 0
 model = None
 while True:
-    song = index[current]
-    print(f'''
-        {song['title']}
-                   {song['example']}/{song['num_examples']}
-        <----------({current})---------->
-    ''')
-    x = dataset[current, 0]
-    y = dataset[current, 1]
-    duration = len(x) / sps
-    option = input(':')
-    if option[0] == 'l':
-        from feedforward import *
+    try:
+        current = (current + len(index)) % len(index)
+        song = index[current]
+        print(
+            f'{song["title"]}'.center(100) + '\n' +
+            f'{song["target_instrument"]} | {song["instruments"]}'.center(100) + '\n' +
+            f'{song["start_time"] // 60 :02}:{song["start_time"] % 60 :02} - {song["end_time"] // 60 :02}:{song["end_time"] % 60 :02}'.center(100) + '\n' +
+            f'{song["example"]}/{song["num_examples"]}'.center(100) + '\n' +
+            f'<----------({current})---------->'.center(100) + '\n'
+        )
+        x = dataset[current, 0]
+        y = dataset[current, 1]
+        duration = len(x) / sps
+        option = input(':')
+        if option[0] == 'l':
+            from feedforward import *
 
-        layers = [
-            Layer(1024, True, tanh, d_tanh),
-            Layer(512, True, elu, d_elu),
-            Layer(1024, True, elu, d_elu),
-            Layer(spectrograms.shape[-2] * spectrograms.shape[-1], False, relu, d_relu),
-        ]
+            input_shape = metadata['spec_shape'][-1] * metadata['spec_shape'][-2]
 
-        model = FeedforwardNeuralNetwork(spectrograms.shape[-2] * spectrograms.shape[-1], layers)
-        model.print_summary()
+            layers = [
+                Layer(512, True, elu, d_elu),
+                Layer(256, True, elu, d_elu),
+                Layer(256, True, elu, d_elu),
+                Layer(256, True, elu, d_elu),
+                Layer(512, True, elu, d_elu),
+                Layer(input_shape, False, relu, d_relu),
+            ]
 
-        model.load(option[2:])
-    elif option[0] == '<':
-        current -= 1 if len(option) == 1 else int(option[1:])
-        continue
-    elif option[0] == '>':
-        current += 1 if len(option) == 1 else int(option[1:])
-        continue
-    elif option == 'm':
-        sd.play(x.astype('int32'), sps)
-        continue
-    elif option == 's':
-        sd.play(y.astype('int32'), sps)
-        continue
-    elif option == 'p':
-        plt.plot(x, color='blue')
-        plt.plot(y, color='orange')
-        plt.ylim([np.iinfo(x.dtype).min,np.iinfo(x.dtype).max])
-        
-        plt.show()
-        continue
-    elif option == 'sp':
-        s_x = spectrograms[current, 0]
-        s_y = spectrograms[current, 1]
-        plot_spectrogram(s_x, sps, spec_metadata['hop_length'], y_axis='linear')
-        plot_spectrogram(s_y, sps, spec_metadata['hop_length'], y_axis='linear')
-        import pdb; pdb.set_trace()
-        if model != None:
-            print('Running model')
-            y_hat = model.predict(s_x.reshape(1 , s_x.shape[0] * s_x.shape[1]))
-            plot_spectrogram(y_hat.reshape(s_x.shape), sps, spec_metadata['hop_length'], y_axis='linear')
-        plt.show()
-        continue
-    elif option == 'q':
-        break
+            model = FeedforwardNeuralNetwork(input_shape, layers)
+            model.print_summary()
+
+            model.load(option[2:])
+        elif option[0] == '<' or option[0] == '>':
+            mul = 1 if option[0] == '>' else -1
+            p = option.split(' ')
+            command = p[0]
+            steps = 1 if len(p) == 1 else int(p[1])
+            if len(command) == 1 :
+                current += mul * steps
+                current %= len(index)
+            elif len(command) == 2:
+                for _ in range(steps):
+                    current_ex = index[current]['example']
+                    while index[current]['example'] == current_ex:
+                        current += mul
+                        current %= len(index)
+            elif len(command) == 3:
+                for _ in range(steps):
+                    current_title = index[current]['title']
+                    while index[current]['title'] == current_title:
+                        current += mul
+                        current %= len(index)
+            else:
+                current = 0 if mul == -1 else len(index) - 1
+            continue
+        elif option == 'm':
+            sd.play(x.astype('int32'), sps)
+            continue
+        elif option == 's':
+            sd.play(y.astype('int32'), sps)
+            continue
+        elif option == 'p':
+            plt.plot(x, color='blue')
+            plt.plot(y, color='orange')
+            plt.ylim([np.iinfo(x.dtype).min,np.iinfo(x.dtype).max])
+            
+            plt.show()
+            continue
+        elif option == 'sp':
+            s_x = spectrograms[current, 0]
+            s_y = spectrograms[current, 1]
+            plot_spectrogram(s_x, sps, metadata['hop_length'], y_axis='linear')
+            plot_spectrogram(s_y, sps, metadata['hop_length'], y_axis='linear')
+            
+            if model != None:
+                print('Running model')
+                y_hat = model.predict(s_x.reshape(1 , s_x.shape[0] * s_x.shape[1]))
+                plot_spectrogram(y_hat.reshape(s_x.shape), sps, metadata['hop_length'], y_axis='linear')
+            plt.show()
+            continue
+        elif option == 'q':
+            break
+    except Exception as e:
+        print(e)
