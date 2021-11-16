@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 
 import librosa
 from librosa.display import specshow
+import soundfile as sf
 
 def plot_spectrogram(Y, sr, hop_length, y_axis='linear'):
     plt.figure(figsize=(25,10))
@@ -91,10 +92,13 @@ while True:
             sd.play(y.astype('int32'), sps)
         elif option == 'g' and model != None:
             print('Running model')
-            s_y = model(torch.tensor(s_x[None, None, :]).to('cuda')).cpu().detach().numpy()
-            y_inv = librosa.griffinlim(s_y)
 
-            sd.play(y_hat.astype('int32'), sps)
+            s_x = spectrograms[current, 0]
+            # s_y = model(torch.tensor(s_x[None, None, :]).to('cuda')).cpu().detach().numpy()
+            
+            y_inv = librosa.griffinlim(spectrograms[current, 1])
+
+            sf.write(f'{current}.wav', y_inv, sps)
 
             continue
         elif option == 'p':

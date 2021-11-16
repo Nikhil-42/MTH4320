@@ -126,8 +126,9 @@ def validate(model, test_ds, precision=0.75, criterion=nn.BCELoss(), device='cpu
 
 if __name__ == "__main__":
     try:
-        while True:
-            if bool_input('Load model from disk? (y/N): ', default=False):
+        ConsoleLogging.start('FINAL')
+        for instrument in ['vn', 'va', 'vc', 'db', 'fl', 'ob', 'cl', 'sax', 'bn', 'tpt', 'hn', 'tbn', 'tba']:
+            if False:
                 path = os.path.join('saved_models/MUSIC', str_input('filename: '))
                 model = torch.load(path)
             else:
@@ -136,27 +137,25 @@ if __name__ == "__main__":
             model.to('cuda')
             summary(model, input_size=(1, 128, 128))
 
-            device = str_input("device (cuda): ")
+            device = 'cuda'
             device = 'cuda' if len(device) == 0 else device
             model.to(device)
-
-            instrument = str_input('instrument: ')
 
             last_run = sorted([dirname for dirname in next(os.walk('runs'))[1] if instrument in dirname])
             last_run = last_run[-1] if len(last_run) > 0 else f'MUSIC.{instrument}_-1'
             exp_num = int(last_run[last_run.index('_') + 1:]) + 1
 
-            writer = SummaryWriter(f'runs/MUSIC.{instrument}_{exp_num}')
+            writer = SummaryWriter(f'runs/MUSIC.{instrument}_FINAL')
             
-            if bool_input("Perform additional training? (Y/n): "):
+            if True:
                 train_ds = SpectrogramDataset(split='train', instrument=instrument)
 
                 train_kwargs = {}
                 # if bool_input("Resume from checkpoint? (y/N): ", default=False):
                 #     train_kwargs['checkpoint'] = torch.load(str_input("path: "))
                 # else:
-                epochs_str = str_input("epochs (100): ")
-                batch_size_str = str_input("batch_size (32): ")
+                epochs_str = ''
+                batch_size_str = ''
             
                 train_kwargs['epochs'] = 100 if len(epochs_str) == 0 else int(epochs_str)
                 train_kwargs['batch_size'] = 32 if len(batch_size_str) == 0 else int(batch_size_str)
@@ -171,24 +170,25 @@ if __name__ == "__main__":
 
                 strtime = datetime.now().strftime('%S.%M.%H-%d.%m.%Y')
                 os.makedirs('saved_models/{}/'.format("MUSIC"), exist_ok=True)
-                torch.save(model, 'saved_models/{}/{}_{}.pt'.format("MUSIC", instrument, strtime))
+                torch.save(model, 'saved_models/{}/{}_{}.pt'.format("MUSIC", instrument, 'final'))
             
-            if bool_input("Perform evaluation of model? (Y/n): "):
-                precision = float_input('precision (0.75):')
+            if True:
+                precision = 0.99
 
                 test_ds = SpectrogramDataset(split='test')
                 accuracy, loss = validate(model, test_ds, writer=writer, criterion=nn.MSELoss(), device=device)
                 print('Accuracy: ', accuracy)
                 print('Loss: ', loss)
 
-            if bool_input("Add to TensorBoard? (y/N): ", False):
+            if False:
                 test_ds = SpectrogramDataset(split='test')
                 writer.add_graph(model, test_ds[0][0].unsqueeze(0).to(device))
             
             writer.close()
             print("Going back to head.")
-
+        ConsoleLogging.stop()
     except KeyboardInterrupt:
+        GonsoleLogging.stop()
         print("Exiting")
 
         
