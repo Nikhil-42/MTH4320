@@ -21,26 +21,26 @@ class MusicModel(nn.Module):
         super(MusicModel, self).__init__()
 
         self.conv1 = nn.Conv2d(1, 8, 5, 2, padding=2)
-        #self.elu1 = nn.ELU()
+        self.elu1 = nn.ELU()
         self.conv2 = nn.Conv2d(8, 8, 3, padding='same')
-        #self.elu2 = nn.ELU()
+        self.elu2 = nn.ELU()
 
         self.resonator = nn.Conv2d(8, 1, (2, 16), (2, 2))
         self.res_lin = nn.Linear(25*32, 64)
-        #self.elu3 = nn.ELU()
+        self.elu3 = nn.ELU()
 
         self.conv_transpose = nn.ConvTranspose2d(8, 1, 5, 2, padding=1)
         self.relu = nn.ReLU()
 
     def forward(self, x):
         a = self.conv1(x)
-        a = self.relu(a)
+        a = self.elu1(a)
         a = self.conv2(a)
-        a = self.relu(a)
+        a = self.elu2(a)
 
         resonance = self.resonator(a).view(a.shape[0], -1)
         timeline = self.res_lin(resonance).view(a.shape[0], 1, -1, 1)
-        timeline = self.relu(timeline)
+        timeline = self.elu3(timeline)
 
         a = a * timeline
         a = self.conv_transpose(a)[:, :, :-1, :-1]
