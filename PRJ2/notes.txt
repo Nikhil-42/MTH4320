@@ -1,0 +1,24 @@
+VN_0: First try first architecture. good learning curve
+VN_1: additional training of VN_1 little to no effect
+VC_0: Same architecture applied to cello. no learning
+VC_1: Perhaps it was a bad init. no learning
+VC_2: Switched to Adam optimizer. no learning
+TPT_0: Same architecture as VN_1. no learnig
+
+#printed out predictions.. zeros...
+
+replace ReLU with Elu in intermittent layers
+
+VN_2: test new model on data which is known to be functional | large unexplained jump in loss
+VC_3: test new model on other instrument. good learning curve
+TPT_1: test new model on other instrument. good learning curve
+VN_3: test new model on VN again. good learning curve
+
+perhaps increase the size of the network. training is naerly instant and the curve levels off very quickly.
+
+VN_4: No significant advantage over VN_3
+
+Perhaps the plateau is simply the information ceiling and the global minimum
+
+VC_4:
+TPT_2: 

@@ -89,6 +89,13 @@ while True:
             continue
         elif option == 's':
             sd.play(y.astype('int32'), sps)
+        elif option == 'g' and model != None:
+            print('Running model')
+            s_y = model(torch.tensor(s_x[None, None, :]).to('cuda')).cpu().detach().numpy()
+            y_inv = librosa.griffinlim(s_y)
+
+            sd.play(y_hat.astype('int32'), sps)
+
             continue
         elif option == 'p':
             plt.plot(x, color='blue')
