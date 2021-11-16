@@ -20,16 +20,16 @@ class MusicModel(nn.Module):
     def __init__(self):
         super(MusicModel, self).__init__()
 
-        self.conv1 = nn.Conv2d(1, 8, 5, 2, padding=2)
+        self.conv1 = nn.Conv2d(1, 16, 5, 2, padding=2)
         self.elu1 = nn.ELU()
-        self.conv2 = nn.Conv2d(8, 8, 3, padding='same')
+        self.conv2 = nn.Conv2d(16, 16, 3, padding='same')
         self.elu2 = nn.ELU()
 
-        self.resonator = nn.Conv2d(8, 1, (2, 16), (2, 2))
+        self.resonator = nn.Conv2d(16, 1, (2, 16), (2, 2))
         self.res_lin = nn.Linear(25*32, 64)
         self.elu3 = nn.ELU()
 
-        self.conv_transpose = nn.ConvTranspose2d(8, 1, 5, 2, padding=1)
+        self.conv_transpose = nn.ConvTranspose2d(16, 1, 5, 2, padding=1)
         self.relu = nn.ReLU()
 
     def forward(self, x):
