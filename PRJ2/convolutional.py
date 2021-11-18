@@ -141,11 +141,11 @@ if __name__ == "__main__":
             device = 'cuda' if len(device) == 0 else device
             model.to(device)
 
-            last_run = sorted([dirname for dirname in next(os.walk('runs'))[1] if instrument in dirname])
-            last_run = last_run[-1] if len(last_run) > 0 else f'MUSIC.{instrument}_-1'
-            exp_num = int(last_run[last_run.index('_') + 1:]) + 1
+            # last_run = sorted([dirname for dirname in next(os.walk('runs'))[1] if instrument in dirname])
+            # last_run = last_run[-1] if len(last_run) > 0 else f'MUSIC.{instrument}_-1'
+            # exp_num = int(last_run[last_run.index('_') + 1:]) + 1
 
-            writer = SummaryWriter(f'runs/MUSIC.{instrument}_FINAL')
+            writer = SummaryWriter(f'runs/FINAL_MUSIC.{instrument}_2')
             
             if True:
                 train_ds = SpectrogramDataset(split='train', instrument=instrument)
