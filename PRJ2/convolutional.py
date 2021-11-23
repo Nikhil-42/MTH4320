@@ -56,7 +56,7 @@ class SpectrogramDataset(Dataset):
             self.data = self.data[:(len(self.data) * 6) // 10]
         elif split == 'test':
             self.data = self.data[(len(self.data) * 6) // 10:(len(self.data) * 8) // 10]
-        elif split == 'dev':
+        elif split == 'val':
             self.data = self.data[(len(self.data) * 8) // 10:]
     
     def __len__(self):
@@ -70,7 +70,10 @@ def train(model, train_ds, epochs=100, batch_size=32, criterion=nn.BCELoss(), op
     if optimizer == None:
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
+    test_ds = SpectrogramDataset(instrument=instrument, split='test')
+
     train_dl = DataLoader(train_ds, batch_size=batch_size, num_workers=4, shuffle=True)
+    test_dl = DataLoader(test_ds, batch_size=batch_size, num_workers=4, shuffle=False)
 
     model.train()
     model.to(device)
@@ -95,10 +98,21 @@ def train(model, train_ds, epochs=100, batch_size=32, criterion=nn.BCELoss(), op
             running_loss += loss.item()
             # import pdb; pdb.set_trace() # uncomment to interact with model while training
 
-            for name, param in model.named_parameters():
-                writer.add_histogram("Live/"+name, param)
+        for name, param in model.named_parameters():
+            writer.add_histogram("Live/"+name, param)
 
-        writer.add_scalar('Live/Loss', running_loss, epoch)
+        writer.add_scalar('Live/Loss', running_loss/len(train_dl), epoch)
+
+        test_loss = 0
+        for i, (inputs, targets) in enumerate(test_dl):
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            y_pred = model(inputs)
+            loss = criterion(y_pred, targets)
+            test_loss += loss.item()
+
+        writer.add_scalar('Live/TestLoss', test_loss/len(test_dl), epoch)
             
 
     print("Training complete.")
@@ -126,8 +140,8 @@ def validate(model, test_ds, precision=0.75, criterion=nn.BCELoss(), device='cpu
 
 if __name__ == "__main__":
     try:
-        ConsoleLogging.start('FINAL')
-        for instrument in ['vn', 'va', 'vc', 'db', 'fl', 'ob', 'cl', 'sax', 'bn', 'tpt', 'hn', 'tbn', 'tba']:
+        ConsoleLogging.start('log')
+        for instrument in ['vn',]:
             if False:
                 path = os.path.join('saved_models/MUSIC', str_input('filename: '))
                 model = torch.load(path)
@@ -141,11 +155,12 @@ if __name__ == "__main__":
             device = 'cuda' if len(device) == 0 else device
             model.to(device)
 
-            # last_run = sorted([dirname for dirname in next(os.walk('runs'))[1] if instrument in dirname])
-            # last_run = last_run[-1] if len(last_run) > 0 else f'MUSIC.{instrument}_-1'
-            # exp_num = int(last_run[last_run.index('_') + 1:]) + 1
+            last_run = sorted([dirname for dirname in next(os.walk('runs'))[1] if instrument in dirname])
+            last_run = last_run[-1] if len(last_run) > 0 else f'MUSIC.{instrument}_-1'
+            exp_num = int(last_run[last_run.index('_') + 1:]) + 1
 
-            writer = SummaryWriter(f'runs/FINAL_MUSIC.{instrument}_2')
+            writer = SummaryWriter(f'runs/MUSIC.{instrument}_{exp_num}')
+            print(f'Experiment {exp_num} on {instrument}')
             
             if True:
                 train_ds = SpectrogramDataset(split='train', instrument=instrument)
@@ -164,7 +179,7 @@ if __name__ == "__main__":
                 train_kwargs['writer'] = writer
                 train_kwargs['criterion'] = nn.MSELoss()
 
-                train_kwargs['optimizer'] = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0)
+                train_kwargs['optimizer'] = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=0.1)
 
                 train(model, train_ds, **train_kwargs)
 
@@ -175,7 +190,7 @@ if __name__ == "__main__":
             if True:
                 precision = 0.99
 
-                test_ds = SpectrogramDataset(split='test')
+                test_ds = SpectrogramDataset(instrument=instrument, split='test')
                 accuracy, loss = validate(model, test_ds, writer=writer, criterion=nn.MSELoss(), device=device)
                 print('Accuracy: ', accuracy)
                 print('Loss: ', loss)
@@ -188,7 +203,7 @@ if __name__ == "__main__":
             print("Going back to head.")
         ConsoleLogging.stop()
     except KeyboardInterrupt:
-        GonsoleLogging.stop()
+        ConsoleLogging.stop()
         print("Exiting")
 
         

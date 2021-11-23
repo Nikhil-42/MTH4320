@@ -3,7 +3,7 @@ VN_1: additional training of VN_1 little to no effect
 VC_0: Same architecture applied to cello. no learning
 VC_1: Perhaps it was a bad init. no learning
 VC_2: Switched to Adam optimizer. no learning
-TPT_0: Same architecture as VN_1. no learnig
+TPT_0: Same architecture as VN_1. no learning
 
 #printed out predictions.. zeros...
 
@@ -45,4 +45,16 @@ Estimated Total Size (MB): 8.84
 
 VN_5: discontinuity not fixed, loss plateaued 
 
-revert model
+revert model. Maybe instability is caused by large learning rate. Decrease learning rate.
+
+VN_6: no observable change in convergence. same plateau as VN_1
+
+training loss is less than testing loss. add l2 penalty
+
+VN_7: No learning occurred. 
+VN_8: L2 norm halts learning
+
+Reduce L2 penalty
+
+
+

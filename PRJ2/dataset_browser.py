@@ -111,16 +111,27 @@ while True:
         elif option == 'sp':
             s_x = spectrograms[current, 0]
             s_y = spectrograms[current, 1]
-            plot_spectrogram(s_x, sps, metadata['hop_length'], y_axis='linear')
-            plot_spectrogram(s_y, sps, metadata['hop_length'], y_axis='linear')
+
+            fig, axs = plt.subplots(1, 3, sharey=True)
+            axs[0].set_title("Mixed (input)")
+            axs[1].set_title("Solo (target)")
+            axs[2].set_title("Result (pred)")
+
+            specshow(s_x, sr=sps, hop_length=metadata['hop_length'], y_axis='linear', x_axis='time', ax=axs[0])
+            specshow(s_y, sr=sps, hop_length=metadata['hop_length'], y_axis='linear', x_axis='time', ax=axs[1])
+
+            # plot_spectrogram(s_x, sps, metadata['hop_length'], y_axis='linear')
+            # plot_spectrogram(s_y, sps, metadata['hop_length'], y_axis='linear')
             
             if model != None:
                 print('Running model')
                 y_hat = model(torch.tensor(s_x[None, None, :]).to('cuda')).cpu().detach().numpy()
-                plot_spectrogram(y_hat.reshape(s_x.shape), sps, metadata['hop_length'], y_axis='linear')
+                specshow(y_hat.reshape(s_x.shape), sr=sps, hop_length=metadata['hop_length'], y_axis='linear', x_axis='time', ax=axs[2])
+                # plot_spectrogram(y_hat.reshape(s_x.shape), sps, metadata['hop_length'], y_axis='linear')
             plt.show()
             continue
         elif option == 'q':
             break
     except Exception as e:
         print(e)
+        import traceback; traceback.print_tb(e.__traceback__)
