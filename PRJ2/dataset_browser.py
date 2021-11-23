@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 
 import librosa
 from librosa.display import specshow
+import soundfile as sf
 
 def plot_spectrogram(Y, sr, hop_length, y_axis='linear'):
     plt.figure(figsize=(25,10))
@@ -19,7 +20,7 @@ spectrograms = np.memmap('./data/spectrograms.npy', mode='r', dtype=metadata['sp
 
 print('''
 Options:
-[l path] Load model for use
+[l filename] Load model for use
 [<#] Move to (#) previous example
 [>#] Move to (#) next example
 [m] Playback mixed audio
@@ -50,23 +51,17 @@ while True:
         duration = len(x) / sps
         option = input(':')
         if option[0] == 'l':
-            from feedforward import *
+            from convolutional import *
+            from torchsummary import summary
+            import torch
 
-            input_shape = metadata['spec_shape'][-1] * metadata['spec_shape'][-2]
+            path = os.path.join('saved_models/MUSIC', option[2:])
+            model = torch.load(path)
+            model.to('cuda')
+            model.eval()
 
-            layers = [
-                Layer(512, True, elu, d_elu),
-                Layer(256, True, elu, d_elu),
-                Layer(256, True, elu, d_elu),
-                Layer(256, True, elu, d_elu),
-                Layer(512, True, elu, d_elu),
-                Layer(input_shape, False, relu, d_relu),
-            ]
+            summary(model, input_size=(1, 128, 128))
 
-            model = FeedforwardNeuralNetwork(input_shape, layers)
-            model.print_summary()
-
-            model.load(option[2:])
         elif option[0] == '<' or option[0] == '>':
             mul = 1 if option[0] == '>' else -1
             p = option.split(' ')
@@ -95,6 +90,16 @@ while True:
             continue
         elif option == 's':
             sd.play(y.astype('int32'), sps)
+        elif option == 'g' and model != None:
+            print('Running model')
+
+            s_x = spectrograms[current, 0]
+            # s_y = model(torch.tensor(s_x[None, None, :]).to('cuda')).cpu().detach().numpy()
+            
+            y_inv = librosa.griffinlim(spectrograms[current, 1])
+
+            sf.write(f'{current}.wav', y_inv, sps)
+
             continue
         elif option == 'p':
             plt.plot(x, color='blue')
@@ -106,16 +111,27 @@ while True:
         elif option == 'sp':
             s_x = spectrograms[current, 0]
             s_y = spectrograms[current, 1]
-            plot_spectrogram(s_x, sps, metadata['hop_length'], y_axis='linear')
-            plot_spectrogram(s_y, sps, metadata['hop_length'], y_axis='linear')
+
+            fig, axs = plt.subplots(1, 3, sharey=True)
+            axs[0].set_title("Mixed (input)")
+            axs[1].set_title("Solo (target)")
+            axs[2].set_title("Result (pred)")
+
+            specshow(s_x, sr=sps, hop_length=metadata['hop_length'], y_axis='linear', x_axis='time', ax=axs[0])
+            specshow(s_y, sr=sps, hop_length=metadata['hop_length'], y_axis='linear', x_axis='time', ax=axs[1])
+
+            # plot_spectrogram(s_x, sps, metadata['hop_length'], y_axis='linear')
+            # plot_spectrogram(s_y, sps, metadata['hop_length'], y_axis='linear')
             
             if model != None:
                 print('Running model')
-                y_hat = model.predict(s_x.reshape(1 , s_x.shape[0] * s_x.shape[1]))
-                plot_spectrogram(y_hat.reshape(s_x.shape), sps, metadata['hop_length'], y_axis='linear')
+                y_hat = model(torch.tensor(s_x[None, None, :]).to('cuda')).cpu().detach().numpy()
+                specshow(y_hat.reshape(s_x.shape), sr=sps, hop_length=metadata['hop_length'], y_axis='linear', x_axis='time', ax=axs[2])
+                # plot_spectrogram(y_hat.reshape(s_x.shape), sps, metadata['hop_length'], y_axis='linear')
             plt.show()
             continue
         elif option == 'q':
             break
     except Exception as e:
         print(e)
+        import traceback; traceback.print_tb(e.__traceback__)

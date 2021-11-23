@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 
 WIDTH = 10
 MAX_FREQ = 8192
-SPEC_RESOLUTION = (256, 256)
+SPEC_RESOLUTION = (128, 128)
 
 def compile_examples():
 
@@ -171,6 +171,7 @@ def generate_subset(instrument):
     return subspec
 
 if __name__ == '__main__':
-    # compile_examples()
-    # generate_spectrograms()
+    compile_examples()
+    generate_spectrograms()
+    generate_subset('vc')
     pass

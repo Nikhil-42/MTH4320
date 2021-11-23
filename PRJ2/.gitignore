@@ -1,0 +1,5 @@
+models/
+runs/
+saved_models/
+stuff/
+discarded_runs/
